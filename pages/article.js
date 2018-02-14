@@ -34,7 +34,9 @@ export default class Keyword extends Component {
     const { article, source } = this.props
     if (!source) {
       window.location.replace(article.url)
+      return
     }
+    Router.prefetch('/')
   }
 
   closeIframe = () => {
@@ -46,7 +48,11 @@ export default class Keyword extends Component {
 
     return (
       <div>
-        <Meta title={`${article.title} | ${article.source_name}`} url={asPath} />
+        <Meta
+          title={`${article.title} | ${article.source_name}`}
+          image={article.img_url}
+          url={asPath}
+        />
         <GlobalStyles />
         <IframePreview
           url={article.url}
