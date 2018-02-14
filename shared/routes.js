@@ -4,6 +4,7 @@ routes
   .add('download', '/download')
   .add('keyword', '/keyword/:keyword/:date')
   .add('article', '/article/:id')
+  .add('search', '/search/:term')
   .add('index', '/')
   .add('archive', '/:date', 'index')
 
