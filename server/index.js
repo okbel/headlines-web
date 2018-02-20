@@ -1,3 +1,4 @@
+const fs = require('fs')
 const next = require('next')
 const helmet = require('helmet')
 const http2 = require('spdy')
@@ -46,10 +47,21 @@ class Server {
 
       await app.prepare()
 
+      const buildStats = isProd
+        ? JSON.parse(fs.readFileSync('./.next/build-stats.json', 'utf8').toString())
+        : null;
+
+      const buildId = isProd ? fs.readFileSync('./.next/BUILD_ID', 'utf8').toString() : null;
+
       this.ssrCache = new LRUCache({
         max: 100,
         maxAge: 1000 * 60 * 10, // 10 min
       })
+
+      let appJs
+      if (buildStats) {
+        appJs = fs.readFileSync('./.next/app.js', 'utf8')
+      }
 
       if (isProd) {
         // Enable compression on production
@@ -59,7 +71,16 @@ class Server {
       // Enable different security policies through helmet
       server.use(helmet())
 
-      server.use('/favicon.ico', express.static('static/favicon.ico'));
+      server.use('/favicon.ico', express.static('static/favicon.ico'))
+
+      server.get('/healthcheck', (req, res) => {
+        res.json({
+          build: {
+            id: buildId,
+            ...buildStats,
+          },
+        })
+      })
 
       server.get('*', async (req, res) => {
         const { route, query } = sharedRoutes.match(req.url)
@@ -70,6 +91,19 @@ class Server {
         }
 
         Winston.info('Entering route: ', req.url)
+
+        if (req.push && appJs) {
+          const stream = res.push(`/_next/${buildStats['app.js'].hash}/app.js`, {
+            request: {
+              accept: '*/*',
+            },
+            response: {
+              'content-type': 'application/javascript',
+            },
+          })
+          stream.end(appJs)
+        }
+
         if (isProd) {
           return this.renderAndCache(req, res, route.page, query)
         }
@@ -77,10 +111,8 @@ class Server {
       })
 
       const options = {
-        spdy: {
-          plain: true,
-          ssl: false,
-        },
+        key: fs.readFileSync('./server/server.key'),
+        cert: fs.readFileSync('./server/server.crt'),
       }
 
       http2.createServer(options, server).listen(port, (error) => {
@@ -88,7 +120,7 @@ class Server {
           Winston.error(`Ups, something went wrong: ${error}`)
         }
 
-        Winston.info(`Ready on http://localhost:${port}`)
+        Winston.info(`Ready on https://localhost:${port}`)
       })
     } catch (error) {
       Winston.error(`Ups, something went wrong: ${error}`)
